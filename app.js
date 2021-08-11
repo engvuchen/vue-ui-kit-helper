@@ -58,7 +58,6 @@ for (const key in kebabCaseATTRS) {
     }
   }
 }
-
 function toUpperCase(key = '') {
   let camelCase = key.replace(/\-(\w)/g, function (all, letter) {
     return letter.toUpperCase();
@@ -82,7 +81,9 @@ class CustomCompletionItemProvider {
     let tag;
     let txt = this.getTextBeforePosition(this._position);
 
+    // 往上回溯 9 行
     while (this._position.line - line < 10 && line >= 0) {
+      // line 不等，说明当前行是 回溯行
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
       }
@@ -131,11 +132,15 @@ class CustomCompletionItemProvider {
     return arr.pop();
   }
 
+  /** 获取当前位置到 0 的文本 */
   getTextBeforePosition(position) {
-    var start = new Position(position.line, 0);
-    var range = new Range(start, position);
+    // curLine: 0 ... cur
+    let start = new Position(position.line, 0);
+    let range = new Range(start, position);
+
     return this._document.getText(range);
   }
+
   getTagSuggestion() {
     let suggestions = [];
 
@@ -268,6 +273,7 @@ class CustomCompletionItemProvider {
   isAttrValueStart(tag = '', attr) {
     return tag && attr;
   }
+  w;
 
   isAttrStart(tag = '') {
     return tag;
@@ -275,7 +281,8 @@ class CustomCompletionItemProvider {
 
   isTagStart() {
     let txt = this.getTextBeforePosition(this._position);
-    return this.isPug() ? this.pugTagStartReg.test(txt) : this.tagStartReg.test(txt);
+    // return this.isPug() ? this.pugTagStartReg.test(txt) : this.tagStartReg.test(txt);
+    return this.tagStartReg.test(txt);
   }
 
   firstCharsEqual(str1 = '', str2 = '') {
@@ -301,19 +308,16 @@ class CustomCompletionItemProvider {
     this._document = document;
     this._position = position;
 
-    // todo: workspace.getConfiguration =>
-    // https://github.com/engvuchen/vscode-element-helper
+    // https://code.visualstudio.com/api/references/vscode-api#workspace
     const config = workspace.getConfiguration('vue-ui-kit-helper');
     this.size = config.get('indent-size');
     const normalQuotes = config.get('quotes') === 'double' ? '"' : "'";
-    const pugQuotes = config.get('pug-quotes') === 'double' ? '"' : "'";
-    this.quotes = this.isPug() ? pugQuotes : normalQuotes;
+    this.quotes = normalQuotes;
 
-    // let tag = this.isPug() ? this.getPugTag() : this.getPreTag();
     let tag = this.getPreTag();
     let attr = this.getPreAttr();
     if (this.isAttrValueStart(tag, attr)) {
-      // 属性值开始
+      // 属性值开始（标签、属性名都有）
       return this.getAttrValueSuggestion(tag.text, attr);
     } else if (this.isAttrStart(tag)) {
       // 属性开始
@@ -321,13 +325,7 @@ class CustomCompletionItemProvider {
     } else if (this.isTagStart()) {
       // 标签开始
       switch (document.languageId) {
-        // case 'jade':
-        // case 'pug':
-        //   return this.getPugTagSuggestion();
         case 'vue':
-          //   if (this.isPug()) {
-          //     return this.getPugTagSuggestion();
-          //   }
           return this.notInTemplate() ? [] : this.getTagSuggestion();
         case 'html':
           // todo
@@ -337,65 +335,6 @@ class CustomCompletionItemProvider {
       return [];
     }
   }
-
-  //   isPug() {
-  //     if (['pug', 'jade'].includes(this._document.languageId)) {
-  //       return true;
-  //     } else {
-  //       var range = new Range(new Position(0, 0), this._position);
-  //       let txt = this._document.getText(range);
-  //       return /<template[^>]*\s+lang=['"](jade|pug)['"].*/.test(txt);
-  //     }
-  //   }
-  //   getPugTagSuggestion() {
-  //     let suggestions = [];
-
-  //     for (let tag in TAGS) {
-  //       suggestions.push(this.buildPugTagSuggestion(tag, TAGS[tag]));
-  //     }
-  //     return suggestions;
-  //   }
-  //   buildPugTagSuggestion(tag, tagVal) {
-  //     const snippets = [];
-  //     let index = 0;
-  //     let that = this;
-  //     function build(tag, { subtags, defaults }, snippets) {
-  //       let attrs = [];
-  //       defaults &&
-  //         defaults.forEach((item, i) => {
-  //           attrs.push(`${item}=${that.quotes}$${index + i + 1}${that.quotes}`);
-  //         });
-  //       snippets.push(`${' '.repeat(index * that.size)}${tag}(${attrs.join(' ')})`);
-  //       index++;
-  //       subtags && subtags.forEach(item => build(item, TAGS[item], snippets));
-  //     }
-  //     build(tag, tagVal, snippets);
-  //     return {
-  //       label: tag,
-  //       insertText: new SnippetString(snippets.join('\n')),
-  //       kind: CompletionItemKind.Snippet,
-  //       detail: 'element-ui',
-  //       documentation: tagVal.description,
-  //     };
-  //   }
-  //   getPugTag() {
-  //     let line = this._position.line;
-  //     let tag;
-  //     let txt = '';
-
-  //     while (this._position.line - line < 10 && line >= 0) {
-  //       txt = this._document.lineAt(line).text;
-  //       let match = /^\s*([\w-]+)[.#-\w]*\(/.exec(txt);
-  //       if (match) {
-  //         return {
-  //           text: match[1],
-  //           offset: this._document.offsetAt(new Position(line, match.index)),
-  //         };
-  //       }
-  //       line--;
-  //     }
-  //     return;
-  //   }
 }
 
 class App {

@@ -1,40 +1,59 @@
 {
-	"name": "vue-ui-kit-helper",
-	"displayName": "vue-ui-kit-helper",
-	"description": "",
-	"version": "0.0.1",
-	"engines": {
-		"vscode": "^1.59.0"
-	},
-	"categories": [
-		"Other"
-	],
-	"activationEvents": [
-		"onCommand:vue-ui-kit-helper.helloWorld"
-	],
-	"main": "./extension.js",
-	"contributes": {
-		"commands": [
-			{
-				"command": "vue-ui-kit-helper.helloWorld",
-				"title": "Hello World"
-			}
-		]
-	},
-	"scripts": {
-		"lint": "eslint .",
-		"pretest": "npm run lint",
-		"test": "node ./test/runTest.js"
-	},
-	"devDependencies": {
-		"@types/vscode": "^1.59.0",
-		"@types/glob": "^7.1.3",
-		"@types/mocha": "^8.2.2",
-		"@types/node": "14.x",
-		"eslint": "^7.27.0",
-		"glob": "^7.1.7",
-		"mocha": "^8.4.0",
-		"typescript": "^4.3.2",
-		"vscode-test": "^1.5.2"
-	}
+  "name": "vue-ui-kit-helper",
+  "displayName": "vue-ui-kit-helper",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.59.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:html",
+    "onLanguage:vue"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Vue Ui Kit Helper Configuration",
+      "properties": {
+        "vue-ui-kit-helper.indent-size": {
+          "type": "number",
+          "default": 2,
+          "description": "Indentation size of snippets"
+        },
+        "vue-ui-kit-helper.quotes": {
+          "type": "string",
+          "default": "double",
+          "description": "Normal quotes of autocomplete",
+          "enum": [
+            "single",
+            "double"
+          ]
+        }
+      }
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.59.0",
+    "@types/glob": "^7.1.3",
+    "@types/mocha": "^8.2.2",
+    "@types/node": "14.x",
+    "eslint": "^7.27.0",
+    "glob": "^7.1.7",
+    "mocha": "^8.4.0",
+    "typescript": "^4.3.2",
+    "vscode-test": "^1.5.2"
+  },
+  "dependencies": {
+    "element-helper-json-new": "^2.0.6",
+    "pretty": "^2.0.0"
+  }
 }

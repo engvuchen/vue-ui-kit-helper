@@ -27,7 +27,7 @@ function activate(context) {
       },
     ],
     completionItemProvider,
-    // '',
+    '', // value 联想
     ' ',
     ':',
     '<',
