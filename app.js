@@ -1,4 +1,73 @@
-export class CustomCompletionItemProvider {
+const vscode = require('vscode');
+const {
+  window,
+  commands,
+  ViewColumn,
+  Disposable,
+  Event,
+  Uri,
+  CancellationToken,
+  TextDocumentContentProvider,
+  EventEmitter,
+  workspace,
+  CompletionItemProvider,
+  ProviderResult,
+  TextDocument,
+  Position,
+  CompletionItem,
+  CompletionList,
+  CompletionItemKind,
+  SnippetString,
+  Range,
+} = vscode;
+
+const kebabCaseTAGS = require('element-helper-json-new/element-tags.json');
+const kebabCaseATTRS = require('element-helper-json-new/element-attributes.json');
+
+const prettyHTML = require('pretty');
+
+let TAGS = {};
+for (const key in kebabCaseTAGS) {
+  if (kebabCaseTAGS.hasOwnProperty(key)) {
+    const tag = kebabCaseTAGS[key];
+    let subtags = tag.subtags;
+    TAGS[key] = tag;
+
+    let camelCase = toUpperCase(key);
+    TAGS[camelCase] = JSON.parse(JSON.stringify(kebabCaseTAGS[key]));
+    if (subtags) {
+      subtags = subtags.map(item => toUpperCase(item));
+      TAGS[camelCase].subtags = subtags;
+    }
+  }
+}
+
+let ATTRS = {};
+for (const key in kebabCaseATTRS) {
+  if (kebabCaseATTRS.hasOwnProperty(key)) {
+    const element = kebabCaseATTRS[key];
+    ATTRS[key] = element;
+    const tagAttrs = key.split('/');
+    const hasTag = tagAttrs.length > 1;
+    let tag = '';
+    let attr = '';
+    if (hasTag) {
+      tag = toUpperCase(tagAttrs[0]) + '/';
+      attr = tagAttrs[1];
+      ATTRS[tag + attr] = JSON.parse(JSON.stringify(element));
+    }
+  }
+}
+
+function toUpperCase(key = '') {
+  let camelCase = key.replace(/\-(\w)/g, function (all, letter) {
+    return letter.toUpperCase();
+  });
+  camelCase = camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
+  return camelCase;
+}
+
+class CustomCompletionItemProvider {
   _document;
   _position;
   tagReg = /<([\w-]+)\s*/g;
@@ -328,3 +397,18 @@ export class CustomCompletionItemProvider {
   //     return;
   //   }
 }
+
+class App {
+  WORD_REG = /(-?\d*\.\d\w*)|([^\`\~\!\@\$\^\&\*\(\)\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\s]+)/gi;
+
+  setConfig() {
+    // https://github.com/Microsoft/vscode/issues/24464
+    const config = workspace.getConfiguration('editor');
+    const quickSuggestions = config.get('quickSuggestions');
+    if (!quickSuggestions['strings']) {
+      config.update('quickSuggestions', { strings: true }, true);
+    }
+  }
+}
+
+module.exports = { App, CustomCompletionItemProvider };

@@ -1,36 +1,53 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 const vscode = require('vscode');
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
+const { App, CustomCompletionItemProvider } = require('./app');
 
-/**
- * @param {vscode.ExtensionContext} context
- */
 function activate(context) {
+  let app = new App();
+  app.setConfig();
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "vue-ui-kit-helper" is now active!');
+  let completionItemProvider = new CustomCompletionItemProvider();
+  let completion = vscode.languages.registerCompletionItemProvider(
+    [
+      //   {
+      //     language: 'pug',
+      //     scheme: 'file',
+      //   },
+      //   {
+      //     language: 'jade',
+      //     scheme: 'file',
+      //   },
+      {
+        language: 'vue',
+        scheme: 'file',
+      },
+      {
+        language: 'html',
+        scheme: 'file',
+      },
+    ],
+    completionItemProvider,
+    // '',
+    ' ',
+    ':',
+    '<',
+    '"',
+    "'",
+    // '/',
+    '@'
+    // '('
+  );
+  // https://code.visualstudio.com/api/language-extensions/language-configuration-guide#word-pattern
+  let vueLanguageConfig = vscode.languages.setLanguageConfiguration('vue', { wordPattern: app.WORD_REG });
+  //   let pugLanguageConfig = vscode.languages.setLanguageConfiguration('pug', { wordPattern: app.WORD_REG });
+  //   let jadeLanguageConfig = vscode.languages.setLanguageConfiguration('jade', { wordPattern: app.WORD_REG });
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with  registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('vue-ui-kit-helper.helloWorld', function () {
-		// The code you place here will be executed every time your command is executed
-
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from vue-ui-kit-helper!');
-	});
-
-	context.subscriptions.push(disposable);
+  context.subscriptions.push(completion, vueLanguageConfig);
 }
 
-// this method is called when your extension is deactivated
 function deactivate() {}
 
 module.exports = {
-	activate,
-	deactivate
-}
+  activate,
+  deactivate,
+};
