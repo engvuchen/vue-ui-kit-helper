@@ -33,7 +33,7 @@ function activate(context) {
     '<',
     '"',
     "'",
-    // '/',
+    // '/',w
     '@'
     // '('
   );

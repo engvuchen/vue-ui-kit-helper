@@ -25,45 +25,121 @@ const kebabCaseTAGS = require('element-helper-json-new/element-tags.json');
 const kebabCaseATTRS = require('element-helper-json-new/element-attributes.json');
 
 const prettyHTML = require('pretty');
+const fs = require('fs');
 
-let TAGS = {};
-for (const key in kebabCaseTAGS) {
-  if (kebabCaseTAGS.hasOwnProperty(key)) {
-    const tag = kebabCaseTAGS[key];
-    let subtags = tag.subtags;
-    TAGS[key] = tag;
+// let TAGS = {};
+// for (const key in kebabCaseTAGS) {
+//   if (kebabCaseTAGS.hasOwnProperty(key)) {
+//     const tag = kebabCaseTAGS[key];
+//     let subtags = tag.subtags;
+//     TAGS[key] = tag;
 
-    let camelCase = toUpperCase(key);
-    TAGS[camelCase] = JSON.parse(JSON.stringify(kebabCaseTAGS[key]));
-    if (subtags) {
-      subtags = subtags.map(item => toUpperCase(item));
-      TAGS[camelCase].subtags = subtags;
-    }
+//     let camelCase = toUpperCase(key);
+//     TAGS[camelCase] = JSON.parse(JSON.stringify(kebabCaseTAGS[key]));
+//     if (subtags) {
+//       subtags = subtags.map(item => toUpperCase(item));
+//       TAGS[camelCase].subtags = subtags;
+//     }
+//   }
+// }
+
+// let ATTRS = {};
+// for (const key in kebabCaseATTRS) {
+//   if (kebabCaseATTRS.hasOwnProperty(key)) {
+//     const element = kebabCaseATTRS[key];
+//     ATTRS[key] = element;
+//     const tagAttrs = key.split('/');
+//     const hasTag = tagAttrs.length > 1;
+//     let tag = '';
+//     let attr = '';
+//     if (hasTag) {
+//       tag = toUpperCase(tagAttrs[0]) + '/';
+//       attr = tagAttrs[1];
+//       ATTRS[tag + attr] = JSON.parse(JSON.stringify(element));
+//     }
+//   }
+// }
+// function toUpperCase(key = '') {
+//   let camelCase = key.replace(/\-(\w)/g, function (all, letter) {
+//     return letter.toUpperCase();
+//   });
+//   camelCase = camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
+//   return camelCase;
+// }
+
+
+async function getProjectSnippets(sources = []) {
+  let [folder] = workspace.workspaceFolders;
+  if (folder) {
+    let { fsPath } = folder.uri;
+    let queen = sources.map(name => canAccessFile(path.resolve(`${fsPath}/.vscode/${name}.code-snippets`)));
+
+    let allSnippets = {};
+    await Promise.allSettled(queen).then(resList => {
+      let accessFileList = resList.filter(curItem => curItem.status === 'fulfilled').map(curItem => curItem.value);
+
+      accessFileList.forEach(filePath => {
+        try {
+          Object.assign(allSnippets, JSON.parse(fs.readFileSync(snippetPath)));
+        } catch (err) {
+          console.log('err', err.code, err);
+        }
+      });
+    });
+
+    return;
   }
 }
-
-let ATTRS = {};
-for (const key in kebabCaseATTRS) {
-  if (kebabCaseATTRS.hasOwnProperty(key)) {
-    const element = kebabCaseATTRS[key];
-    ATTRS[key] = element;
-    const tagAttrs = key.split('/');
-    const hasTag = tagAttrs.length > 1;
-    let tag = '';
-    let attr = '';
-    if (hasTag) {
-      tag = toUpperCase(tagAttrs[0]) + '/';
-      attr = tagAttrs[1];
-      ATTRS[tag + attr] = JSON.parse(JSON.stringify(element));
-    }
-  }
-}
-function toUpperCase(key = '') {
-  let camelCase = key.replace(/\-(\w)/g, function (all, letter) {
-    return letter.toUpperCase();
+function canAccessFile(filePath = '') {
+  return new Promise((resolve, reject) => {
+    fs.access(filePath, s.constants.F_OK | fs.constants.W_OK, err => {
+      if (!err) {
+        resolve(filePath);
+      } else {
+        if (env !== '--prod') {
+          console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
+        }
+        reject(undefined);
+      }
+    });
   });
-  camelCase = camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
-  return camelCase;
+}
+function getComplementItem(componentName = '', attrName = '', parseResult = {}) {
+  let keyName = `@cls cls-${componentName}-${attrName}`;
+
+  if (parseResult[keyName]) {
+    let { body } = parseResult[keyName];
+    let complementItem = handleSnippetBody(componentName, attrName, body);
+
+    if (!this.collection[componentName]) this.collection[componentName] = {};
+    this.collection[componentName][attrName] = complementItem;
+  }
+}
+function handleSnippetBody(componentName = '' = '', body = []) {
+  let result = {
+
+  };
+  body.forEach((curStr, index) => {
+    let matchAttrResult = curStr.match(matchAttr);
+    let attrName = matchAttrResult ? matchAttrResult[1] : '';
+    let attrValue = matchAttrResult ? matchAttrResult[2] : '';
+
+    let matchCommentResult = curStr.match(matchComment);
+    let comment = matchCommentResult ? matchCommentResult[1] : '';
+
+    if (attrName && attrValue) {
+      attrs.push({
+        detail: `cls-ui`,
+        kind: vscode.CompletionItemKind.Snippet,
+        label: attrName, // 联想的选项名
+        sortText: `0${componentName}_${attrType}_${attrName}`,
+        insertText: new vscode.SnippetString(`${attrName}: \${2:${attrValue}},`),
+        documentation: comment || '',
+      });
+    }
+  });
+
+  return result;
 }
 
 class CustomCompletionItemProvider {
@@ -75,6 +151,7 @@ class CustomCompletionItemProvider {
   pugTagStartReg = /^\s*[\w-]*$/;
   size;
   quotes;
+  provideCompletionData = {};
 
   getPreTag() {
     let line = this._position.line;
@@ -95,7 +172,6 @@ class CustomCompletionItemProvider {
     }
     return;
   }
-
   getPreAttr() {
     let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
     let end = this._position.character;
@@ -141,17 +217,18 @@ class CustomCompletionItemProvider {
     return this._document.getText(range);
   }
 
-  getTagSuggestion() {
-    let suggestions = [];
+  // todo:
+  // getTagSuggestion() {
+  //   let suggestions = [];
 
-    let id = 100;
-    for (let tag in TAGS) {
-      suggestions.push(this.buildTagSuggestion(tag, TAGS[tag], id));
-      id++;
-    }
-    return suggestions;
-  }
-
+  //   let id = 100;
+  //   for (let tag in TAGS) {
+  //     suggestions.push(this.buildTagSuggestion(tag, TAGS[tag], id));
+  //     id++;
+  //   }
+  //   return suggestions;
+  // }
+  // todo:
   getAttrValueSuggestion(tag = '', attr = '') {
     let suggestions = [];
     const values = this.getAttrValues(tag, attr);
@@ -163,40 +240,41 @@ class CustomCompletionItemProvider {
     });
     return suggestions;
   }
-
+  // todo: 重写书香联想，直接返回 tag: [] 对应的数组
   getAttrSuggestion(tag = '') {
-    let suggestions = [];
-    let tagAttrs = this.getTagAttrs(tag);
-    let preText = this.getTextBeforePosition(this._position);
-    let prefix = preText
-      .replace(/['"]([^'"]*)['"]$/, '')
-      .split(/\s|\(+/)
-      .pop();
-    // method attribute
-    const method = prefix[0] === '@';
-    // bind attribute
-    const bind = prefix[0] === ':';
+    // let suggestions = [];
+    // let tagAttrs = this.getTagAttrs(tag);
+    // let preText = this.getTextBeforePosition(this._position);
+    // let prefix = preText
+    //   .replace(/['"]([^'"]*)['"]$/, '')
+    //   .split(/\s|\(+/)
+    //   .pop();
+    // // method attribute
+    // const method = prefix[0] === '@';
+    // // bind attribute
+    // const bind = prefix[0] === ':';
 
-    prefix = prefix.replace(/[:@]/, '');
+    // prefix = prefix.replace(/[:@]/, '');
 
-    if (/[^@:a-zA-z\s]/.test(prefix[0])) {
-      return suggestions;
-    }
+    // if (/[^@:a-zA-z\s]/.test(prefix[0])) {
+    //   return suggestions;
+    // }
 
-    tagAttrs.forEach(attr => {
-      const attrItem = this.getAttrItem(tag, attr);
-      if (attrItem && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
-        const sug = this.buildAttrSuggestion({ attr, tag, bind, method }, attrItem);
-        sug && suggestions.push(sug);
-      }
-    });
-    for (let attr in ATTRS) {
-      const attrItem = this.getAttrItem(tag, attr);
-      if (attrItem && attrItem.global && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
-        const sug = this.buildAttrSuggestion({ attr, tag: null, bind, method }, attrItem);
-        sug && suggestions.push(sug);
-      }
-    }
+    // tagAttrs.forEach(attr => {
+    //   const attrItem = this.getAttrItem(tag, attr);
+    //   if (attrItem && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
+    //     const sug = this.buildAttrSuggestion({ attr, tag, bind, method }, attrItem);
+    //     sug && suggestions.push(sug);
+    //   }
+    // });
+    // for (let attr in ATTRS) {
+    //   const attrItem = this.getAttrItem(tag, attr);
+    //   if (attrItem && attrItem.global && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
+    //     const sug = this.buildAttrSuggestion({ attr, tag: null, bind, method }, attrItem);
+    //     sug && suggestions.push(sug);
+    //   }
+    // }
+
     return suggestions;
   }
 
@@ -273,7 +351,6 @@ class CustomCompletionItemProvider {
   isAttrValueStart(tag = '', attr) {
     return tag && attr;
   }
-  w;
 
   isAttrStart(tag = '') {
     return tag;
@@ -305,34 +382,43 @@ class CustomCompletionItemProvider {
 
   // nav:
   provideCompletionItems(document, position, token) {
+    // const normalQuotes = config.get('quotes') === 'double' ? '"' : "'";
+    // this.quotes = normalQuotes;
+
     this._document = document;
     this._position = position;
 
+    // this.size = config.get('indent-size');
     // https://code.visualstudio.com/api/references/vscode-api#workspace
     const config = workspace.getConfiguration('vue-ui-kit-helper');
-    this.size = config.get('indent-size');
-    const normalQuotes = config.get('quotes') === 'double' ? '"' : "'";
-    this.quotes = normalQuotes;
+    let sources = config.get('sources');
 
-    let tag = this.getPreTag();
-    let attr = this.getPreAttr();
-    if (this.isAttrValueStart(tag, attr)) {
-      // 属性值开始（标签、属性名都有）
-      return this.getAttrValueSuggestion(tag.text, attr);
-    } else if (this.isAttrStart(tag)) {
-      // 属性开始
-      return this.getAttrSuggestion(tag.text);
-    } else if (this.isTagStart()) {
-      // 标签开始
-      switch (document.languageId) {
-        case 'vue':
-          return this.notInTemplate() ? [] : this.getTagSuggestion();
-        case 'html':
-          // todo
-          return this.getTagSuggestion();
+    if (sources.length) {
+      let tag = this.getPreTag();
+      let attr = this.getPreAttr();
+      if (this.isAttrValueStart(tag, attr)) {
+        // 属性值开始（标签、属性名都有）
+
+        return this.getAttrValueSuggestion(tag.text, attr);
+      } else if (this.isAttrStart(tag)) {
+        // 属性开始
+
+        return this.getAttrSuggestion(tag.text);
       }
-    } else {
-      return [];
+
+      // else if (this.isTagStart()) {
+      //   // 标签开始
+      //   // todo:
+      //   switch (document.languageId) {
+      //     case 'vue':
+      //       return this.notInTemplate() ? [] : this.getTagSuggestion();
+      //     case 'html':
+      //       // todo
+      //       return this.getTagSuggestion();
+      //   }
+      // } else {
+      //   return [];
+      // }
     }
   }
 }
