@@ -25,7 +25,7 @@ function activate(context) {
     '<',
     '"',
     "'",
-    // '/',
+    // '/',w
     '@'
     // '('
   );

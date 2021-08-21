@@ -32,6 +32,11 @@
             "single",
             "double"
           ]
+        },
+        "vue-ui-kit-helper.sources": {
+          "type": "array",
+          "default": "[]",
+          "description": "Project Snippet Names"
         }
       }
     }
