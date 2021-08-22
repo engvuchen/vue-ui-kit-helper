@@ -3,6 +3,8 @@ const vscode = require('vscode');
 const { App, CustomCompletionItemProvider } = require('./app');
 
 function activate(context) {
+  console.log('activate');
+
   let app = new App();
   app.setConfig();
 
@@ -22,11 +24,12 @@ function activate(context) {
     '', // value 联想
     ' ',
     ':',
+    '@',
     '<',
     '"',
     "'",
     // '/',w
-    '@'
+    '\n'
     // '('
   );
   let vueLanguageConfig = vscode.languages.setLanguageConfiguration('vue', { wordPattern: app.WORD_REG });
