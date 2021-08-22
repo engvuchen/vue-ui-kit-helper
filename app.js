@@ -21,53 +21,37 @@ const {
   Range,
 } = vscode;
 
-const kebabCaseTAGS = require('element-helper-json-new/element-tags.json');
-const kebabCaseATTRS = require('element-helper-json-new/element-attributes.json');
+// const kebabCaseTAGS = require('element-helper-json-new/element-tags.json');
+// const kebabCaseATTRS = require('element-helper-json-new/element-attributes.json');
 
 const prettyHTML = require('pretty');
 const fs = require('fs');
 
-// let TAGS = {};
-// for (const key in kebabCaseTAGS) {
-//   if (kebabCaseTAGS.hasOwnProperty(key)) {
-//     const tag = kebabCaseTAGS[key];
-//     let subtags = tag.subtags;
-//     TAGS[key] = tag;
+const tagNameReg = /(?<= ).+/;
+const attrReg = /\s*"([a-zA-Z]+)":\s*([a-zA-Z0-9\u4e00-\u9fa5\s\[\]\(\)\{\}"'=>]+)(?=,|\s)/;
+const attrValueReg = /(?<= )(.+)/;
+const snippetEnumReg = /\$\{\d+|.*|\}/;
+const snippetValueReg = /\$\{\d:(.+)\}/;
 
-//     let camelCase = toUpperCase(key);
-//     TAGS[camelCase] = JSON.parse(JSON.stringify(kebabCaseTAGS[key]));
-//     if (subtags) {
-//       subtags = subtags.map(item => toUpperCase(item));
-//       TAGS[camelCase].subtags = subtags;
-//     }
-//   }
-// }
+const allSnippetsCon = {};
+main();
 
-// let ATTRS = {};
-// for (const key in kebabCaseATTRS) {
-//   if (kebabCaseATTRS.hasOwnProperty(key)) {
-//     const element = kebabCaseATTRS[key];
-//     ATTRS[key] = element;
-//     const tagAttrs = key.split('/');
-//     const hasTag = tagAttrs.length > 1;
-//     let tag = '';
-//     let attr = '';
-//     if (hasTag) {
-//       tag = toUpperCase(tagAttrs[0]) + '/';
-//       attr = tagAttrs[1];
-//       ATTRS[tag + attr] = JSON.parse(JSON.stringify(element));
-//     }
-//   }
-// }
-// function toUpperCase(key = '') {
-//   let camelCase = key.replace(/\-(\w)/g, function (all, letter) {
-//     return letter.toUpperCase();
-//   });
-//   camelCase = camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
-//   return camelCase;
-// }
+async function main() {
+  const config = workspace.getConfiguration('vue-ui-kit-helper');
+  let sources = config.get('sources');
+  if (sources && sources.length) {
+    let allSnippets = await getProjectSnippets();
 
-
+    Object.keys(allSnippets).forEach(snippetKey => {
+      let [tagName] = tagNameReg.match(snippetKey) || [];
+      if (tagName) {
+        allSnippetsCon[tagName] = handleSnippetBody(tagName, allSnippets[snippetKey].body);
+      }
+    });
+  } else {
+    console.error('Please give a sources settings, see');
+  }
+}
 async function getProjectSnippets(sources = []) {
   let [folder] = workspace.workspaceFolders;
   if (folder) {
@@ -87,7 +71,7 @@ async function getProjectSnippets(sources = []) {
       });
     });
 
-    return;
+    return allSnippets;
   }
 }
 function canAccessFile(filePath = '') {
@@ -104,37 +88,25 @@ function canAccessFile(filePath = '') {
     });
   });
 }
-function getComplementItem(componentName = '', attrName = '', parseResult = {}) {
-  let keyName = `@cls cls-${componentName}-${attrName}`;
+function handleSnippetBody(tagName = '', body = []) {
+  let result = [];
 
-  if (parseResult[keyName]) {
-    let { body } = parseResult[keyName];
-    let complementItem = handleSnippetBody(componentName, attrName, body);
-
-    if (!this.collection[componentName]) this.collection[componentName] = {};
-    this.collection[componentName][attrName] = complementItem;
-  }
-}
-function handleSnippetBody(componentName = '' = '', body = []) {
-  let result = {
-
-  };
-  body.forEach((curStr, index) => {
-    let matchAttrResult = curStr.match(matchAttr);
-    let attrName = matchAttrResult ? matchAttrResult[1] : '';
-    let attrValue = matchAttrResult ? matchAttrResult[2] : '';
-
-    let matchCommentResult = curStr.match(matchComment);
-    let comment = matchCommentResult ? matchCommentResult[1] : '';
-
+  // 匹配 props 范围。上一Tag的开头到末尾
+  let preTagEndIndex = body.findIndex(str => str === '>');
+  body.slice(1, preTagEndIndex + 1).forEach((curStr, index) => {
+    let [attrName, attrValue] = curStr.match(attrReg) || [];
     if (attrName && attrValue) {
-      attrs.push({
-        detail: `cls-ui`,
-        kind: vscode.CompletionItemKind.Snippet,
+      let [comment] = curStr.match(matchComment) || [];
+
+      result.push({
         label: attrName, // 联想的选项名
-        sortText: `0${componentName}_${attrType}_${attrName}`,
-        insertText: new vscode.SnippetString(`${attrName}: \${2:${attrValue}},`),
+        insertText: new vscode.SnippetString(
+          `${attrName}: ${this.snippetEnumReg.test(attrValue) ? attrValue : `\${2:${attrValue}}`},`
+        ),
         documentation: comment || '',
+        detail: tagName,
+        kind: vscode.CompletionItemKind.Snippet,
+        sortText: `0_${tagName}_${attrName}`,
       });
     }
   });
@@ -146,21 +118,24 @@ class CustomCompletionItemProvider {
   _document;
   _position;
   tagReg = /<([\w-]+)\s*/g;
-  attrReg = /(?:\(|\s*)(\w+)=['"][^'"]*/; // todo: 为什么会有 ( 开头？
+  attrReg = /(?:\(|\s*)(\w+)=['"][^'"]*/; // todo: 为什么会有 ( 开头 ?
   tagStartReg = /<([\w-]*)$/;
-  pugTagStartReg = /^\s*[\w-]*$/;
+  // pugTagStartReg = /^\s*[\w-]*$/;
   size;
   quotes;
   provideCompletionData = {};
 
+  /**
+   * @returns {Object} { text }
+   */
   getPreTag() {
     let line = this._position.line;
     let tag;
+    // note：除当前行获取光标前的字符, 回溯行都是全部获取
     let txt = this.getTextBeforePosition(this._position);
 
     // 往上回溯 9 行
     while (this._position.line - line < 10 && line >= 0) {
-      // line 不等，说明当前行是 回溯行
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
       }
@@ -168,30 +143,50 @@ class CustomCompletionItemProvider {
 
       if (tag === 'break') return;
       if (tag) return tag;
+
       line--;
     }
     return;
   }
   getPreAttr() {
+    /**
+     * :value = ""
+     * type = ""
+     *
+     * :value = "" type = ""
+     * ` type = ""` => text
+     *
+     * "abcd abc
+     */
+    // todo: 这里是怎么定位到 属性开头的？
     let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
     let end = this._position.character;
+    // 这里的目标：` type = ""` => text
     let start = txt.lastIndexOf(' ', end) + 1;
     let parsedTxt = this._document.getText(new Range(this._position.line, start, this._position.line, end));
 
-    return this.matchAttr(this.attrReg, parsedTxt);
+    return this.attrReg(this.attrReg, parsedTxt);
   }
-
-  matchAttr(reg, txt = '') {
-    let match;
-
-    // nav: attrReg exec
-    match = reg.exec(txt);
+  attrReg(reg, txt = '') {
+    let match = reg.exec(txt);
     return !/"[^"]*"/.test(txt) && match && match[1];
   }
-
   matchTag(reg, txt = '', line = -1) {
     let match;
     let arr = [];
+
+    /**
+     * 1. 一般来说，应该只有两种 ？
+     *
+     * <tagName attrName = ""
+     *
+     * <tagName
+     *  attrName = ""
+     */
+    /**
+     * 1. 不匹配尾标签 </
+     * 2.
+     */
 
     if (
       /<\/?[-\w]+[^<>]*>[\s\w]*<?\s*[\w-]*$/.test(txt) ||
@@ -202,12 +197,12 @@ class CustomCompletionItemProvider {
     while ((match = reg.exec(txt))) {
       arr.push({
         text: match[1],
-        offset: this._document.offsetAt(new Position(line, match.index)),
+        // offset: this._document.offsetAt(new Position(line, match.index)),
       });
     }
+
     return arr.pop();
   }
-
   /** 获取当前位置到 0 的文本 */
   getTextBeforePosition(position) {
     // curLine: 0 ... cur
@@ -217,133 +212,107 @@ class CustomCompletionItemProvider {
     return this._document.getText(range);
   }
 
-  // todo:
-  // getTagSuggestion() {
+  // todo: 重写，直接返回 tag: [] 对应的数组
+  // getAttrSuggestion(tag = '') {
   //   let suggestions = [];
+  //   let tagAttrs = this.getTagAttrs(tag);
+  //   let preText = this.getTextBeforePosition(this._position);
+  //   let prefix = preText
+  //     .replace(/['"]([^'"]*)['"]$/, '')
+  //     .split(/\s|\(+/)
+  //     .pop();
+  //   // method attribute
+  //   const method = prefix[0] === '@';
+  //   // bind attribute
+  //   const bind = prefix[0] === ':';
 
-  //   let id = 100;
-  //   for (let tag in TAGS) {
-  //     suggestions.push(this.buildTagSuggestion(tag, TAGS[tag], id));
-  //     id++;
+  //   prefix = prefix.replace(/[:@]/, '');
+
+  //   if (/[^@:a-zA-z\s]/.test(prefix[0])) {
+  //     return suggestions;
   //   }
+
+  //   tagAttrs.forEach(attr => {
+  //     const attrItem = this.getAttrItem(tag, attr);
+  //     if (attrItem && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
+  //       const sug = this.buildAttrSuggestion({ attr, tag, bind, method }, attrItem);
+  //       sug && suggestions.push(sug);
+  //     }
+  //   });
+  //   for (let attr in ATTRS) {
+  //     const attrItem = this.getAttrItem(tag, attr);
+  //     if (attrItem && attrItem.global && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
+  //       const sug = this.buildAttrSuggestion({ attr, tag: null, bind, method }, attrItem);
+  //       sug && suggestions.push(sug);
+  //     }
+  //   }
+
   //   return suggestions;
   // }
-  // todo:
-  getAttrValueSuggestion(tag = '', attr = '') {
-    let suggestions = [];
-    const values = this.getAttrValues(tag, attr);
-    values.forEach(value => {
-      suggestions.push({
-        label: value,
-        kind: CompletionItemKind.Value,
-      });
-    });
-    return suggestions;
-  }
-  // todo: 重写书香联想，直接返回 tag: [] 对应的数组
-  getAttrSuggestion(tag = '') {
-    // let suggestions = [];
-    // let tagAttrs = this.getTagAttrs(tag);
-    // let preText = this.getTextBeforePosition(this._position);
-    // let prefix = preText
-    //   .replace(/['"]([^'"]*)['"]$/, '')
-    //   .split(/\s|\(+/)
-    //   .pop();
-    // // method attribute
-    // const method = prefix[0] === '@';
-    // // bind attribute
-    // const bind = prefix[0] === ':';
+  // buildTagSuggestion(tag, tagVal, id) {
+  //   const snippets = [];
+  //   let index = 0;
+  //   let that = this;
+  //   function build(tag, { subtags, defaults }, snippets) {
+  //     let attrs = '';
+  //     defaults &&
+  //       defaults.forEach((item, i) => {
+  //         attrs += ` ${item}=${that.quotes}$${index + i + 1}${that.quotes}`;
+  //       });
+  //     snippets.push(`${index > 0 ? '<' : ''}${tag}${attrs}>`);
+  //     index++;
+  //     subtags && subtags.forEach(item => build(item, TAGS[item], snippets));
+  //     snippets.push(`</${tag}>`);
+  //   }
+  //   build(tag, tagVal, snippets);
 
-    // prefix = prefix.replace(/[:@]/, '');
+  //   return {
+  //     label: tag,
+  //     sortText: `0${id}${tag}`,
+  //     insertText: new SnippetString(prettyHTML('<' + snippets.join(''), { indent_size: this.size }).substr(1)),
+  //     kind: CompletionItemKind.Snippet,
+  //     detail: `element-ui ${tagVal.version ? `(version: ${tagVal.version})` : ''}`,
+  //     documentation: tagVal.description,
+  //   };
+  // }
+  // buildAttrSuggestion({ attr, tag, bind, method }, { description, type, version }) {
+  //   if ((method && type === 'method') || (bind && type !== 'method') || (!method && !bind)) {
+  //     return {
+  //       label: attr,
+  //       insertText:
+  //         type && type === 'flag' ? `${attr} ` : new SnippetString(`${attr}=${this.quotes}$1${this.quotes}$0`),
+  //       kind: type && type === 'method' ? CompletionItemKind.Method : CompletionItemKind.Property,
+  //       detail: tag
+  //         ? `<${tag}> ${version ? `(version: ${version})` : ''}`
+  //         : `element-ui ${version ? `(version: ${version})` : ''}`,
+  //       documentation: description,
+  //     };
+  //   } else {
+  //     return;
+  //   }
+  // }
 
-    // if (/[^@:a-zA-z\s]/.test(prefix[0])) {
-    //   return suggestions;
-    // }
-
-    // tagAttrs.forEach(attr => {
-    //   const attrItem = this.getAttrItem(tag, attr);
-    //   if (attrItem && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
-    //     const sug = this.buildAttrSuggestion({ attr, tag, bind, method }, attrItem);
-    //     sug && suggestions.push(sug);
-    //   }
-    // });
-    // for (let attr in ATTRS) {
-    //   const attrItem = this.getAttrItem(tag, attr);
-    //   if (attrItem && attrItem.global && (!prefix.trim() || this.firstCharsEqual(attr, prefix))) {
-    //     const sug = this.buildAttrSuggestion({ attr, tag: null, bind, method }, attrItem);
-    //     sug && suggestions.push(sug);
-    //   }
-    // }
-
-    return suggestions;
-  }
-
-  buildTagSuggestion(tag, tagVal, id) {
-    const snippets = [];
-    let index = 0;
-    let that = this;
-    function build(tag, { subtags, defaults }, snippets) {
-      let attrs = '';
-      defaults &&
-        defaults.forEach((item, i) => {
-          attrs += ` ${item}=${that.quotes}$${index + i + 1}${that.quotes}`;
-        });
-      snippets.push(`${index > 0 ? '<' : ''}${tag}${attrs}>`);
-      index++;
-      subtags && subtags.forEach(item => build(item, TAGS[item], snippets));
-      snippets.push(`</${tag}>`);
-    }
-    build(tag, tagVal, snippets);
-
-    return {
-      label: tag,
-      sortText: `0${id}${tag}`,
-      insertText: new SnippetString(prettyHTML('<' + snippets.join(''), { indent_size: this.size }).substr(1)),
-      kind: CompletionItemKind.Snippet,
-      detail: `element-ui ${tagVal.version ? `(version: ${tagVal.version})` : ''}`,
-      documentation: tagVal.description,
-    };
-  }
-
-  buildAttrSuggestion({ attr, tag, bind, method }, { description, type, version }) {
-    if ((method && type === 'method') || (bind && type !== 'method') || (!method && !bind)) {
-      return {
-        label: attr,
-        insertText:
-          type && type === 'flag' ? `${attr} ` : new SnippetString(`${attr}=${this.quotes}$1${this.quotes}$0`),
-        kind: type && type === 'method' ? CompletionItemKind.Method : CompletionItemKind.Property,
-        detail: tag
-          ? `<${tag}> ${version ? `(version: ${version})` : ''}`
-          : `element-ui ${version ? `(version: ${version})` : ''}`,
-        documentation: description,
-      };
-    } else {
-      return;
-    }
-  }
-
-  getAttrValues(tag, attr) {
-    let attrItem = this.getAttrItem(tag, attr);
-    let options = attrItem && attrItem.options;
-    if (!options && attrItem) {
-      if (attrItem.type === 'boolean') {
-        options = ['true', 'false'];
-      } else if (attrItem.type === 'icon') {
-        options = ATTRS['icons'];
-      } else if (attrItem.type === 'shortcut-icon') {
-        options = [];
-        ATTRS['icons'].forEach(icon => {
-          options.push(icon.replace(/^el-icon-/, ''));
-        });
-      }
-    }
-    return options || [];
-  }
+  // getAttrValues(tag, attr) {
+  //   let attrItem = this.getAttrItem(tag, attr);
+  //   let options = attrItem && attrItem.options;
+  //   if (!options && attrItem) {
+  //     if (attrItem.type === 'boolean') {
+  //       options = ['true', 'false'];
+  //     } else if (attrItem.type === 'icon') {
+  //       options = ATTRS['icons'];
+  //     } else if (attrItem.type === 'shortcut-icon') {
+  //       options = [];
+  //       ATTRS['icons'].forEach(icon => {
+  //         options.push(icon.replace(/^el-icon-/, ''));
+  //       });
+  //     }
+  //   }
+  //   return options || [];
+  // }
 
   getTagAttrs(tag = '') {
     return (TAGS[tag] && TAGS[tag].attributes) || [];
   }
-
   getAttrItem(tag = string, attr = string) {
     return ATTRS[`${tag}/${attr}`] || ATTRS[attr];
   }
@@ -351,23 +320,18 @@ class CustomCompletionItemProvider {
   isAttrValueStart(tag = '', attr) {
     return tag && attr;
   }
-
-  isAttrStart(tag = '') {
-    return tag;
-  }
-
   isTagStart() {
     let txt = this.getTextBeforePosition(this._position);
-    // return this.isPug() ? this.pugTagStartReg.test(txt) : this.tagStartReg.test(txt);
     return this.tagStartReg.test(txt);
   }
 
-  firstCharsEqual(str1 = '', str2 = '') {
-    if (str2 && str1) {
-      return str1[0].toLowerCase() === str2[0].toLowerCase();
-    }
-    return false;
-  }
+  // firstCharsEqual(str1 = '', str2 = '') {
+  //   if (str2 && str1) {
+  //     return str1[0].toLowerCase() === str2[0].toLowerCase();
+  //   }
+  //   return false;
+  // }
+
   // tentative plan for vue file
   notInTemplate() {
     let line = this._position.line;
@@ -393,32 +357,38 @@ class CustomCompletionItemProvider {
     const config = workspace.getConfiguration('vue-ui-kit-helper');
     let sources = config.get('sources');
 
+    // 1. 标签 2. 标签 + 属性
     if (sources.length) {
       let tag = this.getPreTag();
       let attr = this.getPreAttr();
       if (this.isAttrValueStart(tag, attr)) {
-        // 属性值开始（标签、属性名都有）
+        // 返回值 => 标签、属性名都有
+        let attrList = allSnippetsCon[tag] || [];
+        if (attrList.length) {
+          let attrItem = attrList.find(curItem => curItem.label === attr);
+          // 若是普通值，返回嵌套在默认值中的值；若是枚举，直接返回
+          let { insertText } = attrItem;
+          let attrValue = insertText.replace(attrValueReg, '$1');
+          if (attrValue) {
+            if (!snippetEnumReg.test(attrValue)) {
+              attrValue = attrValue.replace(snippetValueReg, '$1');
+            }
 
-        return this.getAttrValueSuggestion(tag.text, attr);
-      } else if (this.isAttrStart(tag)) {
-        // 属性开始
-
-        return this.getAttrSuggestion(tag.text);
+            return Object.assign(attrItem, {
+              insertText: attrValue,
+            });
+          }
+        }
+      } else if (this.isTagStart()) {
+        // 返回属性列表
+        let [tag] = this.getTextBeforePosition(this._position).match(this.tagStartReg) || [];
+        // 标签开始
+        if (tag && ['vue', 'html'].includes(document.languageId)) {
+          return this.notInTemplate() ? [] : allSnippetsCon[tag] || [];
+        }
       }
 
-      // else if (this.isTagStart()) {
-      //   // 标签开始
-      //   // todo:
-      //   switch (document.languageId) {
-      //     case 'vue':
-      //       return this.notInTemplate() ? [] : this.getTagSuggestion();
-      //     case 'html':
-      //       // todo
-      //       return this.getTagSuggestion();
-      //   }
-      // } else {
-      //   return [];
-      // }
+      return [];
     }
   }
 }
