@@ -30,7 +30,7 @@ const path = require('path');
 const tagNameReg = /(?<= ).+/;
 const attrAndValueReg = /\s*([\:@][a-zA-Z-_]+)="(.*)"/;
 const attrValueReg = /(?<==)"(.*)"/;
-const snippetEnumReg = /\$\{\d+|.*|\}/;
+const snippetEnumReg = /\$\{\d+\|.*\|\}/;
 const snippetValueReg = /\$\{\d:(.*)\}/;
 const commentReg = /(?<=\/\/ ).+/;
 
@@ -56,6 +56,7 @@ async function main() {
   }
 }
 async function getProjectSnippets(sources = []) {
+  // https://code.visualstudio.com/api/references/vscode-api#workspace
   let [folder] = workspace.workspaceFolders;
   if (folder) {
     let { fsPath } = folder.uri;
@@ -95,15 +96,10 @@ function canAccessFile(filePath = '') {
 function handleSnippetBody(tagName = '', body = []) {
   let result = [];
 
-  // 匹配 props 范围。上一Tag的开头到末尾
   let preTagEndIndex = body.findIndex(str => str === '>');
+  // note: props 范围 - 上一Tag的开头到末尾
   body.slice(2, preTagEndIndex).forEach((curStr, index) => {
     let [, attrName, attrValue] = attrAndValueReg.exec(curStr) || [];
-
-    if (tagName === 'affix') {
-      console.log('curStr', curStr);
-      console.log(attrName, attrValue);
-    }
 
     if (attrName) {
       let label = attrName.replace(/[:@]/g, '');
@@ -131,7 +127,7 @@ class CustomCompletionItemProvider {
   tagReg = /<([\w-]+)\s*/g;
   attrReg = /(?:\(|\s*)([\w-]+)=['"][^'"]*/; // todo: 为什么会有 ( 开头 ?
   tagStartReg = /<([\w-]*)$/;
-  // pugTagStartReg = /^\s*[\w-]*$/;
+  tagEndReg = /<\s*\/[a-zA-Z_-]+/;
   size;
   quotes;
   provideCompletionData = {};
@@ -150,9 +146,13 @@ class CustomCompletionItemProvider {
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
       }
+
       tag = this.matchTag(this.tagReg, txt, line);
 
-      if (tag === 'break') return;
+      if (tag === 'break' || this.tagEndReg.test(txt)) {
+        return;
+      }
+
       if (tag) return tag;
 
       line--;
@@ -162,22 +162,16 @@ class CustomCompletionItemProvider {
   getPreAttr() {
     // todo: 这里是怎么定位到 属性开头的？
     // <affix [:offset-bottom="30" :offset-bottom="30"] cur
-
     // '    <affix :offset-bottom="30'
     // note: 应该是为了获取值才这么设计的 - 敲双引号取值
-    // let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
-    let txt = this.getTextBeforePosition(this._position).replace(preAttrReg, '');
-
-    console.log('txt', txt);
+    let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
 
     let end = this._position.character;
-    console.log('end, end');
-    // 这里的目标：` type = ""` => text
-    // 两空格之间 + 1
-    let start = txt.lastIndexOf(' ', end) + 1;
-    let parsedTxt = this._document.getText(new Range(this._position.line, start, this._position.line, end));
 
-    console.log('parsedTxt', parsedTxt);
+    let start = txt.lastIndexOf(' ', end) + 1;
+    let parsedTxt = this._document
+      .getText(new Range(this._position.line, start, this._position.line, end))
+      .replace(preAttrReg, '');
 
     let match = this.attrReg.exec(parsedTxt.replace(preAttrReg, ''));
 
@@ -195,7 +189,7 @@ class CustomCompletionItemProvider {
       return 'break';
     }
 
-    // note: 执行到有不满足的情况，防止多个标签在同一行的误判；
+    // note: 连续执行仅取最后一个，防止多个标签在同一行的误判；
     while ((match = reg.exec(txt))) {
       arr.push({
         text: match[1],
@@ -216,13 +210,6 @@ class CustomCompletionItemProvider {
   isAttrValueStart(tag = '', attr) {
     return tag && attr;
   }
-  // isTagStart(tag) {
-  //   // let txt = this.getTextBeforePosition(this._position);
-  //   // // todo: 有标签的判断；
-  //   // return this.tagStartReg.test(txt);
-
-  //   return tag;
-  // }
 
   // tentative plan for vue file
   notInTemplate() {
@@ -236,18 +223,9 @@ class CustomCompletionItemProvider {
     return false;
   }
 
-  // nav:
   provideCompletionItems(document, position, token) {
-    // const normalQuotes = config.get('quotes') === 'double' ? '"' : "'";
-    // this.quotes = normalQuotes;
-
     this._document = document;
     this._position = position;
-
-    // this.size = config.get('indent-size');
-    // https://code.visualstudio.com/api/references/vscode-api#workspaceE
-
-    // 1. 标签 2. 标签 + 属性
 
     let provideResult = [];
     let tag = this.getPreTag();
@@ -263,25 +241,15 @@ class CustomCompletionItemProvider {
       if (attrList.length) {
         let attrItem = attrList.find(curItem => curItem.label === attr);
 
-        console.log(attr, attrItem, attrList);
-
         // 若是普通值，返回嵌套在默认值中的值；若是枚举，直接返回
         if (attrItem) {
           let newAttrItem = JSON.parse(JSON.stringify(attrItem));
           let { insertText } = newAttrItem;
-
-          // todo: 定位不对，都横着写，会触发上一属性的联想
-
           let [, attrValue] = attrValueReg.exec(insertText.value) || [];
 
           console.log('attrValue', attrValue);
 
           if (attrValue) {
-            // 非枚举值，才需处理
-            // if (!snippetEnumReg.test(attrValue)) {
-            //   attrValue = attrValue.replace(snippetValueReg, '$1');
-            // }
-
             provideResult = [
               Object.assign(newAttrItem, {
                 insertText: attrValue,
@@ -293,7 +261,6 @@ class CustomCompletionItemProvider {
       }
     } else if (tag && tag.text && ['vue', 'html'].includes(document.languageId)) {
       // 标签 - 返回属性列表
-      console.log('startWithTag', allSnippetsCon, allSnippetsCon[tag.text]);
 
       provideResult = this.notInTemplate() ? [] : allSnippetsCon[tag.text] || [];
     }

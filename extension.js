@@ -21,7 +21,7 @@ function activate(context) {
       },
     ],
     completionItemProvider,
-    '', // value 联想
+    // '', // value 联想
     ' ',
     ':',
     '@',
