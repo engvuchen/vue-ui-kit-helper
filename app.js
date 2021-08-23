@@ -28,11 +28,13 @@ const fs = require('fs');
 const path = require('path');
 
 const tagNameReg = /(?<= ).+/;
-const attrAndValueReg = /\s*([\:@]\w+)="(.+)"/;
-const attrValueReg = /(?<= )(.+)/;
+const attrAndValueReg = /\s*([\:@][a-zA-Z-_]+)="(.*)"/;
+const attrValueReg = /(?<==)"(.*)"/;
 const snippetEnumReg = /\$\{\d+|.*|\}/;
-const snippetValueReg = /\$\{\d:(.+)\}/;
+const snippetValueReg = /\$\{\d:(.*)\}/;
 const commentReg = /(?<=\/\/ ).+/;
+
+const preAttrReg = /[:@]?[\w-]+=['"].*['"]\s$/g;
 
 const allSnippetsCon = {};
 main();
@@ -42,10 +44,9 @@ async function main() {
   let sources = config.get('sources');
   if (sources && sources.length) {
     let allSnippets = await getProjectSnippets(sources);
-
     Object.keys(allSnippets).forEach(snippetKey => {
       let [tagName] = tagNameReg.exec(snippetKey) || [];
-      console.log('tagName', tagName);
+
       if (tagName) {
         allSnippetsCon[tagName] = handleSnippetBody(tagName, allSnippets[snippetKey].body);
       }
@@ -96,13 +97,18 @@ function handleSnippetBody(tagName = '', body = []) {
 
   // 匹配 props 范围。上一Tag的开头到末尾
   let preTagEndIndex = body.findIndex(str => str === '>');
-  body.slice(1, preTagEndIndex + 1).forEach((curStr, index) => {
+  body.slice(2, preTagEndIndex).forEach((curStr, index) => {
     let [, attrName, attrValue] = attrAndValueReg.exec(curStr) || [];
 
-    if (attrName && attrValue) {
+    if (tagName === 'affix') {
+      console.log('curStr', curStr);
+      console.log(attrName, attrValue);
+    }
+
+    if (attrName) {
+      let label = attrName.replace(/[:@]/g, '');
       let [comment] = commentReg.exec(curStr) || [];
 
-      let label = attrName.replace(/[:@]/g, '');
       result.push({
         label, // 联想的选项名
         insertText: new vscode.SnippetString(
@@ -123,7 +129,7 @@ class CustomCompletionItemProvider {
   _document;
   _position;
   tagReg = /<([\w-]+)\s*/g;
-  attrReg = /(?:\(|\s*)(\w+)=['"][^'"]*/; // todo: 为什么会有 ( 开头 ?
+  attrReg = /(?:\(|\s*)([\w-]+)=['"][^'"]*/; // todo: 为什么会有 ( 开头 ?
   tagStartReg = /<([\w-]*)$/;
   // pugTagStartReg = /^\s*[\w-]*$/;
   size;
@@ -155,13 +161,27 @@ class CustomCompletionItemProvider {
   }
   getPreAttr() {
     // todo: 这里是怎么定位到 属性开头的？
-    let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
+    // <affix [:offset-bottom="30" :offset-bottom="30"] cur
+
+    // '    <affix :offset-bottom="30'
+    // note: 应该是为了获取值才这么设计的 - 敲双引号取值
+    // let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
+    let txt = this.getTextBeforePosition(this._position).replace(preAttrReg, '');
+
+    console.log('txt', txt);
+
     let end = this._position.character;
+    console.log('end, end');
     // 这里的目标：` type = ""` => text
+    // 两空格之间 + 1
     let start = txt.lastIndexOf(' ', end) + 1;
     let parsedTxt = this._document.getText(new Range(this._position.line, start, this._position.line, end));
 
-    let match = this.attrReg.exec(parsedTxt);
+    console.log('parsedTxt', parsedTxt);
+
+    let match = this.attrReg.exec(parsedTxt.replace(preAttrReg, ''));
+
+    // 多个横属性，正确；用 test(txt) 排除
     return !/"[^"]*"/.test(txt) && match && match[1];
   }
   matchTag(reg, txt = '', line = -1) {
@@ -226,51 +246,61 @@ class CustomCompletionItemProvider {
 
     // this.size = config.get('indent-size');
     // https://code.visualstudio.com/api/references/vscode-api#workspaceE
-    const config = workspace.getConfiguration('vue-ui-kit-helper');
-    let sources = config.get('sources');
-
-    let provideResult = [];
 
     // 1. 标签 2. 标签 + 属性
-    if (sources.length) {
-      let tag = this.getPreTag();
-      let attr = this.getPreAttr();
 
-      console.log('tag', tag, 'attr', attr);
+    let provideResult = [];
+    let tag = this.getPreTag();
+    let attr = this.getPreAttr();
 
-      if (this.isAttrValueStart(tag, attr)) {
-        console.log('isAttrValueStart');
+    console.log('tag', tag, 'attr', attr);
 
-        // 返回值 => 标签、属性名都有
-        let attrList = allSnippetsCon[tag.text] || [];
-        if (attrList.length) {
-          let attrItem = attrList.find(curItem => curItem.label === attr);
-          // 若是普通值，返回嵌套在默认值中的值；若是枚举，直接返回
-          let { insertText } = attrItem;
+    if (this.isAttrValueStart(tag, attr)) {
+      console.log('isAttrValueStart');
+
+      // 返回值 => 标签、属性名都有
+      let attrList = allSnippetsCon[tag.text] || [];
+      if (attrList.length) {
+        let attrItem = attrList.find(curItem => curItem.label === attr);
+
+        console.log(attr, attrItem, attrList);
+
+        // 若是普通值，返回嵌套在默认值中的值；若是枚举，直接返回
+        if (attrItem) {
+          let newAttrItem = JSON.parse(JSON.stringify(attrItem));
+          let { insertText } = newAttrItem;
 
           // todo: 定位不对，都横着写，会触发上一属性的联想
-          let attrValue = insertText.value.replace(attrValueReg, '$1');
-          if (attrValue) {
-            if (!snippetEnumReg.test(attrValue)) {
-              attrValue = attrValue.replace(snippetValueReg, '$1');
-            }
 
-            provideResult = Object.assign(attrItem, {
-              insertText: attrValue,
-            });
+          let [, attrValue] = attrValueReg.exec(insertText.value) || [];
+
+          console.log('attrValue', attrValue);
+
+          if (attrValue) {
+            // 非枚举值，才需处理
+            // if (!snippetEnumReg.test(attrValue)) {
+            //   attrValue = attrValue.replace(snippetValueReg, '$1');
+            // }
+
+            provideResult = [
+              Object.assign(newAttrItem, {
+                insertText: attrValue,
+                label: attrValue,
+              }),
+            ];
           }
         }
-      } else if (tag.text && ['vue', 'html'].includes(document.languageId)) {
-        // 标签 - 返回属性列表
-        console.log('startWithTag', allSnippetsCon, allSnippetsCon[tag.text]);
-
-        provideResult = this.notInTemplate() ? [] : allSnippetsCon[tag.text] || [];
       }
+    } else if (tag && tag.text && ['vue', 'html'].includes(document.languageId)) {
+      // 标签 - 返回属性列表
+      console.log('startWithTag', allSnippetsCon, allSnippetsCon[tag.text]);
 
-      console.log('provideResult', provideResult);
-
-      return provideResult;
+      provideResult = this.notInTemplate() ? [] : allSnippetsCon[tag.text] || [];
     }
+
+    console.log('provideResult', provideResult);
+
+    return provideResult;
   }
 }
 
