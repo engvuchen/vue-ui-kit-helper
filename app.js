@@ -34,7 +34,8 @@ const snippetEnumReg = /\$\{\d+\|.*\|\}/;
 const snippetValueReg = /\$\{\d:(.*)\}/;
 const commentReg = /(?<=\/\/ ).+/;
 
-const preAttrReg = /[:@]?[\w-]+=['"].*['"]\s$/g;
+const preAttrReg = /[:@]?[\w-]+=['"].*['"]\s*/g;
+const beforeAttrReg = /[:@\w]/;
 
 const allSnippetsCon = {};
 main();
@@ -149,7 +150,7 @@ class CustomCompletionItemProvider {
 
       tag = this.matchTag(this.tagReg, txt, line);
 
-      if (tag === 'break' || this.tagEndReg.test(txt)) {
+      if (tag === 'break' && this.tagEndReg.test(txt)) {
         return;
       }
 
@@ -160,20 +161,19 @@ class CustomCompletionItemProvider {
     return;
   }
   getPreAttr() {
-    // todo: 这里是怎么定位到 属性开头的？
     // <affix [:offset-bottom="30" :offset-bottom="30"] cur
     // '    <affix :offset-bottom="30'
     // note: 应该是为了获取值才这么设计的 - 敲双引号取值
     let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
-
     let end = this._position.character;
-
     let start = txt.lastIndexOf(' ', end) + 1;
     let parsedTxt = this._document
       .getText(new Range(this._position.line, start, this._position.line, end))
       .replace(preAttrReg, '');
 
-    let match = this.attrReg.exec(parsedTxt.replace(preAttrReg, ''));
+    let match = this.attrReg.exec(parsedTxt);
+
+    console.log('parsedTxt', parsedTxt, match);
 
     // 多个横属性，正确；用 test(txt) 排除
     return !/"[^"]*"/.test(txt) && match && match[1];
@@ -207,10 +207,6 @@ class CustomCompletionItemProvider {
     return this._document.getText(range);
   }
 
-  isAttrValueStart(tag = '', attr) {
-    return tag && attr;
-  }
-
   // tentative plan for vue file
   notInTemplate() {
     let line = this._position.line;
@@ -228,16 +224,25 @@ class CustomCompletionItemProvider {
     this._position = position;
 
     let provideResult = [];
-    let tag = this.getPreTag();
+    let { text: tagName } = this.getPreTag() || {};
     let attr = this.getPreAttr();
 
-    console.log('tag', tag, 'attr', attr);
+    console.log('tagName', tagName, 'attr', attr);
+    console.log('allSnippetsCon', allSnippetsCon);
 
-    if (this.isAttrValueStart(tag, attr)) {
+    // note: 在下一属性前不补全
+    let { line, character } = this._position;
+    let nextCharacter = this._document.lineAt(line).text.slice(character, character + 1);
+    console.log('nextCharacter', nextCharacter, beforeAttrReg.test(nextCharacter));
+    if (beforeAttrReg.test(nextCharacter)) {
+      return [];
+    }
+
+    if (tagName && attr) {
       console.log('isAttrValueStart');
 
       // 返回值 => 标签、属性名都有
-      let attrList = allSnippetsCon[tag.text] || [];
+      let attrList = allSnippetsCon[tagName] || [];
       if (attrList.length) {
         let attrItem = attrList.find(curItem => curItem.label === attr);
 
@@ -259,10 +264,11 @@ class CustomCompletionItemProvider {
           }
         }
       }
-    } else if (tag && tag.text && ['vue', 'html'].includes(document.languageId)) {
+    } else if (tagName && ['vue', 'html'].includes(document.languageId)) {
       // 标签 - 返回属性列表
+      console.log('isTagStart', 'allSnippetsCon[tagName]', allSnippetsCon[tagName]);
 
-      provideResult = this.notInTemplate() ? [] : allSnippetsCon[tag.text] || [];
+      provideResult = this.notInTemplate() ? [] : allSnippetsCon[tagName] || [];
     }
 
     console.log('provideResult', provideResult);
