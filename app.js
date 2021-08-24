@@ -1,28 +1,5 @@
 const vscode = require('vscode');
-const {
-  window,
-  commands,
-  ViewColumn,
-  Disposable,
-  Event,
-  Uri,
-  CancellationToken,
-  TextDocumentContentProvider,
-  EventEmitter,
-  workspace,
-  CompletionItemProvider,
-  ProviderResult,
-  TextDocument,
-  Position,
-  CompletionItem,
-  CompletionList,
-  CompletionItemKind,
-  SnippetString,
-  Range,
-} = vscode;
-
-// const kebabCaseTAGS = require('element-helper-json-new/element-tags.json');
-// const kebabCaseATTRS = require('element-helper-json-new/element-attributes.json');
+const { window, workspace, Position, CompletionItemKind, SnippetString, Range } = vscode;
 
 const fs = require('fs');
 const path = require('path');
@@ -31,7 +8,6 @@ const tagNameReg = /(?<= ).+/;
 const attrAndValueReg = /\s*([\:@][a-zA-Z-_]+)="(.*)"/;
 const attrValueReg = /(?<==)"(.*)"/;
 const snippetEnumReg = /\$\{\d+\|.*\|\}/;
-const snippetValueReg = /\$\{\d:(.*)\}/;
 const commentReg = /(?<=\/\/ ).+/;
 
 const preAttrReg = /[:@]?[\w-]+=['"].*['"]\s*/g;
@@ -108,12 +84,12 @@ function handleSnippetBody(tagName = '', body = []) {
 
       result.push({
         label, // 联想的选项名
-        insertText: new vscode.SnippetString(
+        insertText: new SnippetString(
           `${attrName}="${snippetEnumReg.test(attrValue) ? attrValue : `\${2:${attrValue}}`}"`
         ),
         documentation: comment || '',
         detail: tagName,
-        kind: vscode.CompletionItemKind.Snippet,
+        kind: CompletionItemKind.Snippet,
         sortText: `0_${tagName}_${label}`,
       });
     }
@@ -142,7 +118,7 @@ class CustomCompletionItemProvider {
     // note：除当前行获取光标前的字符, 回溯行都是全部获取
     let txt = this.getTextBeforePosition(this._position);
 
-    // 往上回溯 9 行
+    // 往上回溯 10 行
     while (this._position.line - line < 10 && line >= 0) {
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
@@ -175,7 +151,6 @@ class CustomCompletionItemProvider {
 
     console.log('parsedTxt', parsedTxt, match);
 
-    // 多个横属性，正确；用 test(txt) 排除
     return !/"[^"]*"/.test(txt) && match && match[1];
   }
   matchTag(reg, txt = '', line = -1) {
@@ -198,9 +173,7 @@ class CustomCompletionItemProvider {
 
     return arr.pop();
   }
-  /** 获取当前位置到 0 的文本 */
   getTextBeforePosition(position) {
-    // curLine: 0 ... cur
     let start = new Position(position.line, 0);
     let range = new Range(start, position);
 
@@ -230,10 +203,12 @@ class CustomCompletionItemProvider {
     console.log('tagName', tagName, 'attr', attr);
     console.log('allSnippetsCon', allSnippetsCon);
 
-    // note: 在下一属性前不补全
+    // note: 在下一属性前，不补全
     let { line, character } = this._position;
     let nextCharacter = this._document.lineAt(line).text.slice(character, character + 1);
+
     console.log('nextCharacter', nextCharacter, beforeAttrReg.test(nextCharacter));
+
     if (beforeAttrReg.test(nextCharacter)) {
       return [];
     }
@@ -266,7 +241,8 @@ class CustomCompletionItemProvider {
       }
     } else if (tagName && ['vue', 'html'].includes(document.languageId)) {
       // 标签 - 返回属性列表
-      console.log('isTagStart', 'allSnippetsCon[tagName]', allSnippetsCon[tagName]);
+
+      console.log('isTagStart', allSnippetsCon[tagName]);
 
       provideResult = this.notInTemplate() ? [] : allSnippetsCon[tagName] || [];
     }
