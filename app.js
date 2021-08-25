@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const tagNameReg = /(?<= ).+/;
-const attrAndValueReg = /\s*([\:@][a-zA-Z-_]+)="(.*)"/;
+const attrAndValueReg = /\s*([\:@]?[a-zA-Z-_]+)="(.*)"/;
 const attrValueReg = /(?<==)"(.*)"/;
 const snippetEnumReg = /\$\{\d+\|.*\|\}/;
 const commentReg = /(?<=\/\/ ).+/;
@@ -75,6 +75,7 @@ function handleSnippetBody(tagName = '', body = []) {
 
   let preTagEndIndex = body.findIndex(str => str === '>');
   // note: props 范围 - 上一Tag的开头到末尾
+
   body.slice(2, preTagEndIndex).forEach((curStr, index) => {
     let [, attrName, attrValue] = attrAndValueReg.exec(curStr) || [];
 
@@ -84,9 +85,7 @@ function handleSnippetBody(tagName = '', body = []) {
 
       result.push({
         label, // 联想的选项名
-        insertText: new SnippetString(
-          `${attrName}="${snippetEnumReg.test(attrValue) ? attrValue : `\${2:${attrValue}}`}"`
-        ),
+        insertText: new SnippetString(`${attrName}="${handleSnippetValue(attrValue)}"`),
         documentation: comment || '',
         detail: tagName,
         kind: CompletionItemKind.Snippet,
@@ -95,6 +94,13 @@ function handleSnippetBody(tagName = '', body = []) {
     }
   });
 
+  return result;
+}
+function handleSnippetValue(attrValue = '') {
+  let result = attrValue || '';
+  if (!snippetEnumReg.test(attrValue)) {
+    result = `\${2:${attrValue}}`;
+  }
   return result;
 }
 
@@ -118,8 +124,8 @@ class CustomCompletionItemProvider {
     // note：除当前行获取光标前的字符, 回溯行都是全部获取
     let txt = this.getTextBeforePosition(this._position);
 
-    // 往上回溯 10 行
-    while (this._position.line - line < 10 && line >= 0) {
+    // 往上回溯
+    while (this._position.line - line < 20 && line >= 0) {
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
       }
@@ -148,8 +154,6 @@ class CustomCompletionItemProvider {
       .replace(preAttrReg, '');
 
     let match = this.attrReg.exec(parsedTxt);
-
-    console.log('parsedTxt', parsedTxt, match);
 
     return !/"[^"]*"/.test(txt) && match && match[1];
   }
@@ -201,13 +205,10 @@ class CustomCompletionItemProvider {
     let attr = this.getPreAttr();
 
     console.log('tagName', tagName, 'attr', attr);
-    console.log('allSnippetsCon', allSnippetsCon);
 
     // note: 在下一属性前，不补全
     let { line, character } = this._position;
     let nextCharacter = this._document.lineAt(line).text.slice(character, character + 1);
-
-    console.log('nextCharacter', nextCharacter, beforeAttrReg.test(nextCharacter));
 
     if (beforeAttrReg.test(nextCharacter)) {
       return [];
