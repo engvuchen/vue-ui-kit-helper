@@ -98,7 +98,7 @@ function handleSnippetBody(tagName = '', body = []) {
 }
 function handleSnippetValue(attrValue = '') {
   let result = attrValue || '';
-  if (!snippetEnumReg.test(attrValue)) {
+  if (attrValue && !snippetEnumReg.test(attrValue)) {
     result = `\${2:${attrValue}}`;
   }
   return result;
@@ -108,7 +108,8 @@ class CustomCompletionItemProvider {
   _document;
   _position;
   tagReg = /<([\w-]+)\s*/g;
-  attrReg = /(?:\(|\s*)([\w-]+)=['"][^'"]*/; // todo: 为什么会有 ( 开头 ?
+  // attrReg = /(?:\(|\s*)([\w-]+)=['"][^'"]*/;
+  attrReg = /[:@\s]?([\w-]+)=['"][^'"]*/;
   tagStartReg = /<([\w-]*)$/;
   tagEndReg = /<\s*\/[a-zA-Z_-]+/;
   size;
@@ -153,9 +154,12 @@ class CustomCompletionItemProvider {
       .getText(new Range(this._position.line, start, this._position.line, end))
       .replace(preAttrReg, '');
 
+    console.log('parsedTxt', parsedTxt);
+
     let match = this.attrReg.exec(parsedTxt);
 
-    return !/"[^"]*"/.test(txt) && match && match[1];
+    // !/"[^"]*"/.test(txt) &&
+    return match && match[1];
   }
   matchTag(reg, txt = '', line = -1) {
     let match;
@@ -233,8 +237,8 @@ class CustomCompletionItemProvider {
           if (attrValue) {
             provideResult = [
               Object.assign(newAttrItem, {
-                insertText: attrValue,
-                label: attrValue,
+                insertText: new SnippetString(attrValue),
+                label: snippetEnumReg.test(attrValue) ? `${attr}_enum` : `${attr}_default`,
               }),
             ];
           }
