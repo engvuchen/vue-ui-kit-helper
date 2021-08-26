@@ -21,6 +21,7 @@ async function main() {
   let sources = config.get('sources');
   if (sources && sources.length) {
     let allSnippets = await getProjectSnippets(sources);
+
     Object.keys(allSnippets).forEach(snippetKey => {
       let [tagName] = tagNameReg.exec(snippetKey) || [];
 
@@ -28,6 +29,9 @@ async function main() {
         allSnippetsCon[tagName] = handleSnippetBody(tagName, allSnippets[snippetKey].body);
       }
     });
+
+    let { fsPath } = workspace.workspaceFolders[0].uri;
+    fs.writeFileSync(`${fsPath}/allSnippetsCon.json`, JSON.stringify(allSnippetsCon, undefined, 4));
   } else {
     console.error('Please give a sources settings, see');
   }
@@ -126,7 +130,7 @@ class CustomCompletionItemProvider {
     let txt = this.getTextBeforePosition(this._position);
 
     // 往上回溯
-    while (this._position.line - line < 20 && line >= 0) {
+    while (this._position.line - line < 30 && line >= 0) {
       if (line !== this._position.line) {
         txt = this._document.lineAt(line).text;
       }
@@ -153,8 +157,6 @@ class CustomCompletionItemProvider {
     let parsedTxt = this._document
       .getText(new Range(this._position.line, start, this._position.line, end))
       .replace(preAttrReg, '');
-
-    console.log('parsedTxt', parsedTxt);
 
     let match = this.attrReg.exec(parsedTxt);
 
