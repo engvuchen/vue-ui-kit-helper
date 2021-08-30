@@ -31,9 +31,10 @@ async function main() {
     });
 
     let { fsPath } = workspace.workspaceFolders[0].uri;
-    fs.writeFileSync(`${fsPath}/allSnippetsCon.json`, JSON.stringify(allSnippetsCon, undefined, 4));
+
+    // fs.writeFileSync(`${fsPath}/kit-helper.json`, JSON.stringify(allSnippetsCon, undefined, 4));
   } else {
-    console.error('Please give a sources settings, see');
+    console.error('Please give a sources setting');
   }
 }
 async function getProjectSnippets(sources = []) {
@@ -42,7 +43,7 @@ async function getProjectSnippets(sources = []) {
   if (folder) {
     let { fsPath } = folder.uri;
     let queen = sources.map(name => {
-      return canAccessFile(path.resolve(`${fsPath}/.vscode/${name}.code-snippets`));
+      return canAccessFile(path.resolve(`${fsPath}/.vscode/${name}.json`));
     });
 
     let allSnippets = {};
@@ -66,9 +67,7 @@ function canAccessFile(filePath = '') {
       if (!err) {
         resolve(filePath);
       } else {
-        if (env !== '--prod') {
-          console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
-        }
+        console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
         reject();
       }
     });
@@ -77,10 +76,8 @@ function canAccessFile(filePath = '') {
 function handleSnippetBody(tagName = '', body = []) {
   let result = [];
 
-  let preTagEndIndex = body.findIndex(str => str === '>');
   // note: props 范围 - 上一Tag的开头到末尾
-
-  body.slice(2, preTagEndIndex).forEach((curStr, index) => {
+  body.forEach((curStr, index) => {
     let [, attrName, attrValue] = attrAndValueReg.exec(curStr) || [];
 
     if (attrName) {
