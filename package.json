@@ -63,8 +63,5 @@
     "typescript": "^4.3.2",
     "vscode-test": "^1.5.2"
   },
-  "dependencies": {
-    "element-helper-json-new": "^2.0.6",
-    "pretty": "^2.0.0"
-  }
+  "dependencies": {}
 }
