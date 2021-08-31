@@ -1,13 +1,19 @@
 {
   "name": "vue-ui-kit-helper",
   "displayName": "vue-ui-kit-helper",
-  "description": "",
+  "description": "结合 vue-snippet-gen，指定组件库可自动启用自动补全能力",
   "version": "0.0.1",
+  "publisher": "engvuchen",
+  "icon": "helper.png",
   "engines": {
     "vscode": "^1.59.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/engvuchen/vue-ui-kit-helper"
+  },
   "categories": [
-    "Other"
+    "Snippets"
   ],
   "activationEvents": [
     "onLanguage:html",

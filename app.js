@@ -30,8 +30,7 @@ async function main() {
       }
     });
 
-    let { fsPath } = workspace.workspaceFolders[0].uri;
-
+    // let { fsPath } = workspace.workspaceFolders[0].uri;
     // fs.writeFileSync(`${fsPath}/kit-helper.json`, JSON.stringify(allSnippetsCon, undefined, 4));
   } else {
     console.error('Please give a sources setting');

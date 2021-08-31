@@ -21,15 +21,15 @@ function activate(context) {
       },
     ],
     completionItemProvider,
-    // '', // value 联想
     ' ',
     ':',
     '@',
     '<',
     '"',
     "'",
-    // '/',w
     '\n'
+    // '',
+    // '/',
     // '('
   );
   let vueLanguageConfig = vscode.languages.setLanguageConfiguration('vue', { wordPattern: app.WORD_REG });
