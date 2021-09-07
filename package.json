@@ -2,7 +2,7 @@
   "name": "vue-ui-kit-helper",
   "displayName": "vue-ui-kit-helper",
   "description": "结合 vue-snippet-gen，指定组件库可自动启用自动补全能力",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "engvuchen",
   "icon": "helper.png",
   "engines": {
@@ -25,20 +25,6 @@
       "type": "object",
       "title": "Vue Ui Kit Helper Configuration",
       "properties": {
-        "vue-ui-kit-helper.indent-size": {
-          "type": "number",
-          "default": 2,
-          "description": "Indentation size of snippets"
-        },
-        "vue-ui-kit-helper.quotes": {
-          "type": "string",
-          "default": "double",
-          "description": "Normal quotes of autocomplete",
-          "enum": [
-            "single",
-            "double"
-          ]
-        },
         "vue-ui-kit-helper.sources": {
           "type": "array",
           "default": [],
