@@ -1,8 +1,8 @@
 {
   "name": "vue-ui-kit-helper",
   "displayName": "vue-ui-kit-helper",
-  "description": "结合 vue-snippet-gen，指定组件库可自动启用自动补全能力",
-  "version": "0.0.4",
+  "description": "配置 vue-snippet-gen，指定组件库可快速启用自动补全能力",
+  "version": "0.0.5",
   "publisher": "engvuchen",
   "icon": "helper.png",
   "engines": {
