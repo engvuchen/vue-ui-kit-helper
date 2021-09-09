@@ -3,7 +3,7 @@ const vscode = require('vscode');
 const { App, CustomCompletionItemProvider } = require('./app');
 
 function activate(context) {
-  console.log('activate');
+  console.log('vue-ui-kit-helper activate');
 
   let app = new App();
   app.setConfig();

@@ -17,8 +17,10 @@ const allSnippetsCon = {};
 main();
 
 async function main() {
-  const config = workspace.getConfiguration('vue-ui-kit-helper');
-  let sources = config.get('sources');
+  let sources = (await getSelectedUiKits()) || [];
+
+  console.log('sources', sources);
+
   if (sources && sources.length) {
     let allSnippets = await getProjectSnippets(sources);
 
@@ -102,6 +104,48 @@ function handleSnippetValue(attrValue = '') {
     result = `\${2:${attrValue}}`;
   }
   return result;
+}
+async function getSelectedUiKits() {
+  // 用户配置
+  let sources = workspace.getConfiguration('vue-ui-kit-helper').get('sources') || [];
+  if (sources && sources.length) return sources;
+
+  // 使用 vue-snippet-gen 配置
+  if (!sources.length) {
+    if (workspace.workspaceFolders && workspace.workspaceFolders.length) {
+      let { fsPath } = workspace.workspaceFolders[0].uri;
+
+      let pkgStr = await readFileAsync(fsPath);
+      if (pkgStr) {
+        let genConf = JSON.parse(pkgStr)['vue-snippet-gen'] || [];
+
+        const reg = /.+?(?=\/)/;
+        sources = genConf
+          .map(curItem => {
+            let [result] = reg.exec(curItem.path) || [];
+            return result || curItem.path;
+          })
+          .filter(str => str);
+      }
+    }
+  }
+
+  // demo 配置
+  if (!sources.length) sources = ['element-test-demo'];
+
+  return sources;
+}
+function readFileAsync(fsPath = '') {
+  return new Promise((resolve, reject) => {
+    fs.readFile(`${fsPath}/package.json`, (err, buffer) => {
+      if (err) {
+        console.log(err);
+        reject();
+      } else {
+        resolve(buffer);
+      }
+    });
+  });
 }
 
 class CustomCompletionItemProvider {
@@ -229,7 +273,6 @@ class CustomCompletionItemProvider {
           let newAttrItem = JSON.parse(JSON.stringify(attrItem));
           let { insertText } = newAttrItem;
           let [, attrValue] = attrValueReg.exec(insertText.value) || [];
-
           console.log('attrValue', attrValue);
 
           if (attrValue) {
@@ -244,7 +287,6 @@ class CustomCompletionItemProvider {
       }
     } else if (tagName && ['vue', 'html'].includes(document.languageId)) {
       // 标签 - 返回属性列表
-
       console.log('isTagStart', allSnippetsCon[tagName]);
 
       provideResult = this.notInTemplate() ? [] : allSnippetsCon[tagName] || [];

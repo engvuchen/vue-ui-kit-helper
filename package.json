@@ -27,8 +27,10 @@
       "properties": {
         "vue-ui-kit-helper.sources": {
           "type": "array",
-          "default": [],
-          "description": "Project Snippet Names"
+          "default": [
+            "element-test-demo"
+          ],
+          "description": "Data Sources in .vscode"
         }
       }
     }
