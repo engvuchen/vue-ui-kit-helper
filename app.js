@@ -10,7 +10,6 @@ const attrValueReg = /(?<==)"(.*)"/;
 const snippetEnumReg = /\$\{\d+\|.*\|\}/;
 const commentReg = /(?<=\/\/ ).+/;
 
-const preAttrReg = /[:@]?[\w-]+=['"].*['"]\s*/g;
 const beforeAttrReg = /[:@\w]/;
 
 const allSnippetsCon = {};
@@ -18,7 +17,6 @@ main();
 
 async function main() {
   let sources = (await getSelectedUiKits()) || [];
-
   console.log('sources', sources);
 
   if (sources && sources.length) {
@@ -26,13 +24,12 @@ async function main() {
 
     Object.keys(allSnippets).forEach(snippetKey => {
       let [tagName] = tagNameReg.exec(snippetKey) || [];
-
       if (tagName) {
         allSnippetsCon[tagName] = handleSnippetBody(tagName, allSnippets[snippetKey].body);
       }
     });
 
-    // let { fsPath } = workspace.workspaceFolders[0].uri;
+    // let { fsPath } = workspace.workspaceFolders[0].uri; // 生成测试文件
     // fs.writeFileSync(`${fsPath}/kit-helper.json`, JSON.stringify(allSnippetsCon, undefined, 4));
   } else {
     console.error('Please give a sources setting');
@@ -86,7 +83,7 @@ function handleSnippetBody(tagName = '', body = []) {
       let [comment] = commentReg.exec(curStr) || [];
 
       result.push({
-        label, // 联想的选项名
+        label, // 联想的选项名 - 键入时-匹配选项名
         insertText: new SnippetString(`${attrName}="${handleSnippetValue(attrValue)}"`),
         documentation: comment || '',
         detail: tagName,
@@ -152,76 +149,81 @@ class CustomCompletionItemProvider {
   _document;
   _position;
   tagReg = /<([\w-]+)\s*/g;
-  // attrReg = /(?:\(|\s*)([\w-]+)=['"][^'"]*/;
-  attrReg = /[:@\s]?([\w-]+)=['"][^'"]*/;
+  attrReg = /[:@]?([\w-]+)=['"][^'"]*/g;
   tagStartReg = /<([\w-]*)$/;
   tagEndReg = /<\s*\/[a-zA-Z_-]+/;
-  size;
-  quotes;
-  provideCompletionData = {};
 
-  /**
-   * @returns {Object} { text }
-   */
   getPreTag() {
     let line = this._position.line;
     let tag;
-    // note：除当前行获取光标前的字符, 回溯行都是全部获取
+    // note: 除当前行获取光标前的字符, 回溯行都是全部获取
     let txt = this.getTextBeforePosition(this._position);
 
-    // 往上回溯
+    // 上溯 30 行
+    /**
+     * 中止：
+     * 1. 回溯遇到尾标签（不可跨标签）
+     * 2. 标签内
+     * 3. 末尾标签内
+     */
     while (this._position.line - line < 30 && line >= 0) {
-      if (line !== this._position.line) {
-        txt = this._document.lineAt(line).text;
-      }
+      if (line !== this._position.line) txt = this._document.lineAt(line).text;
 
       tag = this.matchTag(this.tagReg, txt, line);
+      tag === 'break' && console.log('中止匹配标签');
 
-      if (tag === 'break' && this.tagEndReg.test(txt)) {
-        return;
-      }
-
+      if (tag === 'break') return;
       if (tag) return tag;
 
       line--;
     }
-    return;
   }
   getPreAttr() {
-    // <affix [:offset-bottom="30" :offset-bottom="30"] cur
-    // '    <affix :offset-bottom="30'
-    // note: 应该是为了获取值才这么设计的 - 敲双引号取值
-    let txt = this.getTextBeforePosition(this._position).replace(/"[^'"]*(\s*)[^'"]*$/, '');
+    // 去掉刚敲的双引号、和他后面的内容？
+    // .replace(/['"][^'"]*(\s*)[^'"]*$/, '');
+    let txt = this.getTextBeforePosition(this._position);
     let end = this._position.character;
+    // 末尾倒数的第一个空格后，从当前位置开始
     let start = txt.lastIndexOf(' ', end) + 1;
-    let parsedTxt = this._document
-      .getText(new Range(this._position.line, start, this._position.line, end))
-      .replace(preAttrReg, '');
+    let parsedTxt = txt.slice(start, end);
 
-    let match = this.attrReg.exec(parsedTxt);
+    let matchList = [...parsedTxt.matchAll(this.attrReg)];
+    let match = matchList.pop();
 
-    // !/"[^"]*"/.test(txt) &&
     return match && match[1];
   }
   matchTag(reg, txt = '', line = -1) {
-    let match;
-    let arr = [];
+    /**
+     * 1. 检测所有行
+     * 1.1 <button>  - 标签内
+     * 1.2 </button  - 末尾标签
+     *
+     * 1.3 <div><button - 未正确闭合的标签 ？这未必是错误的匹配
+     *
+     * 2. 仅当前行
+     * 2.1  ** > ** - 标签内 ? 可能是标签的最后一行 ageag>
+     * 2.2 最后一个字符是 < => ? => el-helper 原代码敲 <，拉标签，排除这个干扰
+     */
 
-    if (
-      /<\/?[-\w]+[^<>]*>[\s\w]*<?\s*[\w-]*$/.test(txt) ||
-      (this._position.line === line && (/^\s*[^<]+\s*>[^<\/>]*$/.test(txt) || /[^<>]*<$/.test(txt[txt.length - 1])))
-    ) {
+    //  /<\/?[-\w]+[^<>]*>[\s\w]*<?\s*[\w-]*$/
+    if (/<\/?[-\w]+[^<>]*>(.*)$/.test(txt)) {
+      // 最后一个 < 和其后的内容 不是 标签
+      let afterFirstTagTxt = RegExp.$1;
+      if (afterFirstTagTxt) {
+        if (!/<[-\w]+\s*$/.test(afterFirstTagTxt)) return 'break';
+      } else {
+        return 'break';
+      }
+    }
+    // /<\/?[-\w]+[^<>]*>[^<]*$/.test(txt) ||
+    if (this._position.line === line && (/^\s*[^<]+\s*>[^<\/>]*$/.test(txt) || /[^<>]*<$/.test(txt[txt.length - 1]))) {
+      console.log('当前行匹配失败');
       return 'break';
     }
 
-    // note: 连续执行仅取最后一个，防止多个标签在同一行的误判；
-    while ((match = reg.exec(txt))) {
-      arr.push({
-        text: match[1],
-      });
-    }
-
-    return arr.pop();
+    let matchList = [...txt.matchAll(reg)];
+    let match = matchList.pop();
+    if (match) return match[1];
   }
   getTextBeforePosition(position) {
     let start = new Position(position.line, 0);
@@ -229,8 +231,6 @@ class CustomCompletionItemProvider {
 
     return this._document.getText(range);
   }
-
-  // tentative plan for vue file
   notInTemplate() {
     let line = this._position.line;
     while (line) {
@@ -247,18 +247,15 @@ class CustomCompletionItemProvider {
     this._position = position;
 
     let provideResult = [];
-    let { text: tagName } = this.getPreTag() || {};
+    let tagName = this.getPreTag();
     let attr = this.getPreAttr();
 
     console.log('tagName', tagName, 'attr', attr);
 
-    // note: 在下一属性前，不补全
+    // note: 在下一属性前，不补全。用户可能只是想排版，优化体验
     let { line, character } = this._position;
     let nextCharacter = this._document.lineAt(line).text.slice(character, character + 1);
-
-    if (beforeAttrReg.test(nextCharacter)) {
-      return [];
-    }
+    if (beforeAttrReg.test(nextCharacter)) return [];
 
     if (tagName && attr) {
       console.log('isAttrValueStart');
@@ -273,7 +270,6 @@ class CustomCompletionItemProvider {
           let newAttrItem = JSON.parse(JSON.stringify(attrItem));
           let { insertText } = newAttrItem;
           let [, attrValue] = attrValueReg.exec(insertText.value) || [];
-          console.log('attrValue', attrValue);
 
           if (attrValue) {
             provideResult = [
@@ -297,7 +293,6 @@ class CustomCompletionItemProvider {
     return provideResult;
   }
 }
-
 class App {
   WORD_REG = /(-?\d*\.\d\w*)|([^\`\~\!\@\$\^\&\*\(\)\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\s]+)/gi;
 
