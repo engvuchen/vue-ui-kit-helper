@@ -170,9 +170,10 @@ class CustomCompletionItemProvider {
       if (line !== this._position.line) txt = this._document.lineAt(line).text;
 
       tag = this.matchTag(this.tagReg, txt, line);
-      tag === 'break' && console.log('中止匹配标签');
 
+      tag === 'break' && console.log('中止匹配标签');
       if (tag === 'break') return;
+
       if (tag) return tag;
 
       line--;
@@ -193,32 +194,24 @@ class CustomCompletionItemProvider {
     return match && match[1];
   }
   matchTag(reg, txt = '', line = -1) {
-    /**
-     * 1. 检测所有行
-     * 1.1 <button *>  - 标签内
-     * 1.2 </button  - 末尾标签
-     *
-     * 1.4 (原代码) <div><button - 未正确闭合的标签 ？这未必是错误的匹配
-     *
-     * 2. 仅当前行
-     * 2.1  ** > ** - 标签内 ? 可能是标签的最后一行 ageag>
-     * 2.2 最后一个字符是 < => ? => el-helper 原代码敲 <，拉标签，排除这个干扰
-     */
-
-    //  /<\/?[-\w]+[^<>]*>[\s\w]*<?\s*[\w-]*$/
-    if (/<\/?[-\w]+[^<>]*>(.*)$/.test(txt)) {
-      // 最后一个 < 和其后的内容 不是 标签
+    if (/[-\/\w\s]*>(.*)$/.test(txt)) {
+      // [-\w]*> -> 存在一个标签
+      /**
+       * button> 标签开头;
+       * img/> 自闭合标签;
+       *
+       * 其他：
+       * 1. - >
+       * 2. -/>
+       * 3. //
+       * 4. /
+       */
       let afterFirstTagTxt = RegExp.$1;
       if (afterFirstTagTxt) {
         if (!/<[-\w]+\s*$/.test(afterFirstTagTxt)) return 'break';
       } else {
         return 'break';
       }
-    }
-    // /<\/?[-\w]+[^<>]*>[^<]*$/.test(txt) ||
-    if (this._position.line === line && (/^\s*[^<]+\s*>[^<\/>]*$/.test(txt) || /[^<>]*<$/.test(txt[txt.length - 1]))) {
-      console.log('当前行匹配失败');
-      return 'break';
     }
 
     let matchList = [...txt.matchAll(reg)];
