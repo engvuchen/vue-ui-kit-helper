@@ -195,10 +195,10 @@ class CustomCompletionItemProvider {
   matchTag(reg, txt = '', line = -1) {
     /**
      * 1. 检测所有行
-     * 1.1 <button>  - 标签内
+     * 1.1 <button *>  - 标签内
      * 1.2 </button  - 末尾标签
      *
-     * 1.3 <div><button - 未正确闭合的标签 ？这未必是错误的匹配
+     * 1.4 (原代码) <div><button - 未正确闭合的标签 ？这未必是错误的匹配
      *
      * 2. 仅当前行
      * 2.1  ** > ** - 标签内 ? 可能是标签的最后一行 ageag>
