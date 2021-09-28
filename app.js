@@ -1,5 +1,5 @@
 const vscode = require('vscode');
-const { window, workspace, Position, CompletionItemKind, SnippetString, Range } = vscode;
+const { window, workspace, Position, CompletionItemKind, SnippetString, Range, EventEmitter } = vscode;
 
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,6 @@ const attrAndValueReg = /\s*([\:@]?[a-zA-Z-_]+)="(.*)"/;
 const attrValueReg = /(?<==)"(.*)"/;
 const snippetEnumReg = /\$\{\d+\|.*\|\}/;
 const commentReg = /(?<=\/\/ ).+/;
-
 const beforeAttrReg = /[:@\w]/;
 
 const allSnippetsCon = {};
@@ -144,7 +143,6 @@ function readFileAsync(fsPath = '') {
     });
   });
 }
-
 class CustomCompletionItemProvider {
   _document;
   _position;
@@ -286,9 +284,15 @@ class CustomCompletionItemProvider {
     return provideResult;
   }
 }
+
+function encodeDocsUri(query) {
+  return Uri.parse(`antdv-helper://search?${JSON.stringify(query)}`);
+}
+function decodeDocsUri(uri) {
+  return JSON.parse(uri.query);
+}
 class App {
   WORD_REG = /(-?\d*\.\d\w*)|([^\`\~\!\@\$\^\&\*\(\)\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\s]+)/gi;
-
   setConfig() {
     // https://github.com/Microsoft/vscode/issues/24464
     const config = workspace.getConfiguration('editor');
@@ -296,6 +300,78 @@ class App {
     if (!quickSuggestions['strings']) {
       config.update('quickSuggestions', { strings: true }, true);
     }
+  }
+
+  dispose() {
+    this._disposable.dispose();
+  }
+  getSeletedText() {
+    let editor = window.activeTextEditor;
+    if (!editor) return;
+
+    let selection = editor.selection;
+    if (selection.isEmpty) {
+      let range = editor.document.getWordRangeAtPosition(selection.start, this.WORD_REG);
+      return editor.document.getText(range);
+    } else {
+      return editor.document.getText(selection);
+    }
+  }
+  openHtml(query, title) {
+    const { label, detail } = query;
+    const panel = window.createWebviewPanel(label, detail, ViewColumn.One, {
+      enableScripts: true, // 启用JS，默认禁用
+      retainContextWhenHidden: true, // webview被隐藏时保持状态，避免被重置
+    });
+
+    panel.webview.html = this.getWebviewContent(query);
+  }
+  openDocs(query, title = 'docs', editor = window.activeTextEditor) {
+    this.openHtml(query, title);
+  }
+  getWebviewContent(query) {
+    const config = workspace.getConfiguration('antdv-helper');
+    const linkUrl = config.get('docs-url');
+    const path = query.path;
+    const iframeSrc = `${linkUrl}/components/${path}`;
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Cat Coding</title>
+    </head>
+    <body>
+      <iframe style="position: absolute;border: none;left: 0;top: 0;width: 100%;height: 100%;" src="${iframeSrc}"></iframe>
+    </body>
+    </html>`;
+  }
+}
+
+const HTML_CONTENT = query => {
+  // todo:
+  const config = workspace.getConfiguration('vue-ui-kit-helper');
+  const linkUrl = config.get('docs-url');
+  const { path } = query;
+  // todo:
+  const iframeSrc = `${linkUrl}/components/${path}`;
+  return `
+    <body style="background-color: white">
+    <iframe style="position: absolute;border: none;left: 0;top: 0;width: 100%;height: 100%;" src="${iframeSrc}"></iframe>
+    </body>`;
+};
+
+export class docsContentProvider {
+  _onDidChange = new EventEmitter();
+  onDidChange() {
+    return this._onDidChange.event;
+  }
+  update(uri) {
+    this._onDidChange.fire(uri);
+  }
+  provideTextDocumentContent(uri, token) {
+    return HTML_CONTENT(decodeDocsUri(uri));
   }
 }
 

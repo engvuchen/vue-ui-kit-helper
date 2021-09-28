@@ -21,6 +21,19 @@
   ],
   "main": "./extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "vue-ui-kit-helper.search",
+        "title": "vue-ui-kit-helper.search"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vue-ui-kit-helper.search",
+        "key": "shift+cmd+i",
+        "when": "editorTextFocus"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Vue Ui Kit Helper Configuration",
@@ -31,6 +44,11 @@
             "element-test-demo"
           ],
           "description": "Data Sources in .vscode"
+        },
+        "vue-ui-kit-helper.docs-url": {
+          "type": "string",
+          "default": "",
+          "description": "docs-url with url placeholder($)"
         }
       }
     }
